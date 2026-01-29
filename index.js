@@ -17,17 +17,14 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 
-
 // Gunakan BASE_URL dari .env (http://localhost:5000)
 
 const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`;
 
 
-
 app.use(cors());
 
 app.use(express.json());
-
 
 
 // --- 1. KONFIGURASI FOLDER UPLOAD ---
@@ -302,30 +299,17 @@ app.get('/api/profil', (req, res) => {
             }
 
             res.json({
-                // Versi Inggris (Untuk jaga-jaga)
-                name: data.nama_sekolah,
-                status: data.status_sekolah,
-                province: data.provinsi,
-                website: data.website,
-                npsn: data.npsn,
-                accreditation: data.akreditasi,
-                city: data.kota,
-                postalCode: data.kode_pos,
-                vision: data.visi,
-                mission: parsedMisi,
-                
-                // Versi Indonesia (Sesuai Database - INI YANG DIPAKAI)
-                nama_sekolah: data.nama_sekolah,
-                status_sekolah: data.status_sekolah,
-                provinsi: data.provinsi,
-                website: data.website,
-                npsn: data.npsn,
-                akreditasi: data.akreditasi,
-                kota: data.kota,
-                kode_pos: data.kode_pos,
-                visi: data.visi,
-                misi: parsedMisi
-            });
+            // Versi Inggris (Jembatan untuk Frontend Lama/HP)
+            name: data.nama_sekolah,        // <-- INI KUNCINYA!
+            status: data.status_sekolah,    // Mengisi 'status' dengan data dari 'status_sekolah'
+            province: data.provinsi,
+            // ... dst
+            
+            // Versi Indonesia (Untuk Admin Panel Baru)
+            nama_sekolah: data.nama_sekolah,
+            status_sekolah: data.status_sekolah,
+            // ... dst
+        });
         } else {
             res.status(404).json({ message: 'Profil kosong' });
         }
