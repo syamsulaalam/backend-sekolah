@@ -14,12 +14,17 @@ app.use(express.json());
 
 // --- 1. KONEKSI DATABASE ---
 // Kita bungkus koneksi agar aman (Reconnection strategy sederhana)
+// --- 1. KONEKSI DATABASE ---
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 3306
+  port: process.env.DB_PORT || 3306,
+  // TAMBAHAN WAJIB UNTUK AIVEN:
+  ssl: {
+      rejectUnauthorized: false
+  }
 };
 
 let db;
