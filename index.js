@@ -2,10 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql');
 const cors = require('cors');
-// const path = require('path'); // Tidak butuh path lagi untuk uploads lokal
-// const multer = require('multer'); // Multer lokal diganti yang di config
 
-// --- IMPORT CONFIG CLOUDINARY ---
+// --- PENTING: Import Config Cloudinary ---
 const uploadCloud = require('./config/cloudinary');
 
 const app = express();
@@ -14,51 +12,41 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// HAPUS BAGIAN INI (Tidak relevan di Vercel)
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-// KONFIGURASI MULTER LOKAL JUGA DIHAPUS
-
-// --- KONEKSI DATABASE (Gunakan ENV Aiven nanti) ---
-const db = mysql.createConnection({
+// --- 1. KONEKSI DATABASE ---
+// Kita bungkus koneksi agar aman (Reconnection strategy sederhana)
+const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 3306 // Tambahkan port untuk jaga-jaga
-});
+  port: process.env.DB_PORT || 3306
+};
 
-// Bungkus koneksi dalam fungsi agar lebih aman di serverless
+let db;
 function handleDisconnect() {
-    db.connect((err) => {
-      if (err) {
-          console.error('Error koneksi database:', err);
-          setTimeout(handleDisconnect, 2000); // Coba konek lagi setelah 2 detik
-      } else {
-          console.log('BERHASIL Terhubung ke Database MySQL!');
-          // Inisialisasi tabel (opsional jika sudah ada di Aiven)
-      }
-    });
-
-    db.on('error', (err) => {
-        console.error('DB Error', err);
-        if(err.code === 'PROTOCOL_CONNECTION_LOST') {
-            handleDisconnect();
-        } else {
-            throw err;
-        }
-    });
+  db = mysql.createConnection(dbConfig);
+  db.connect((err) => {
+    if (err) {
+      console.error('Error connecting to db:', err);
+      setTimeout(handleDisconnect, 2000);
+    } else {
+      console.log('BERHASIL Terhubung ke Database MySQL (Aiven)!');
+    }
+  });
+  db.on('error', (err) => {
+    if (err.code === 'PROTOCOL_CONNECTION_LOST') handleDisconnect();
+    else throw err;
+  });
 }
 handleDisconnect();
 
 
 // --- RUTE API ---
 
-// ROUTE TEST (Agar tahu backend hidup di Vercel)
-app.get('/', (req, res) => {
-    res.send('Backend Sekolah Vercel is Running!');
-});
+// Cek Server
+app.get('/', (req, res) => res.send('Backend Sekolah Vercel is Running!'));
 
-// A. LOGIN & RESET PASSWORD (Tidak Berubah)
+// A. LOGIN
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   db.query("SELECT * FROM admin WHERE username = ? AND password = ?", [username, password], (err, result) => {
@@ -70,10 +58,8 @@ app.post('/api/login', (req, res) => {
     }
   });
 });
-// (Route reset password disederhanakan untuk contoh ini)
 
-
-// B. BERITA (UBAH UPLOADNYA)
+// B. BERITA (Upload Cloudinary)
 app.get('/api/berita', (req, res) => {
   db.query("SELECT * FROM berita ORDER BY tanggal DESC", (err, result) => {
     if (err) return res.status(500).json(err);
@@ -81,22 +67,19 @@ app.get('/api/berita', (req, res) => {
   });
 });
 
-// GUNAKAN 'uploadCloud.single'
+// Perhatikan: uploadCloud.single('image')
 app.post('/api/berita', uploadCloud.single('image'), (req, res) => {
   const { judul, isi } = req.body;
-  let gambar = req.body.gambar || ''; // Jika upload via URL string
+  let gambar = req.body.gambar || ''; 
 
+  // Jika ada file upload, ambil URL dari Cloudinary
   if (req.file) {
-      // --- PERUBAHAN PENTING DI SINI ---
-      // Cloudinary otomatis memberikan URL lengkap yang aman (https://...)
-      // di dalam properti req.file.path
-      gambar = req.file.path;
+      gambar = req.file.path; 
   }
 
   const sql = "INSERT INTO berita (judul, isi, gambar) VALUES (?, ?, ?)";
   db.query(sql, [judul, isi, gambar], (err, result) => {
     if (err) return res.status(500).json(err);
-    // Kirim balik URL gambarnya agar frontend bisa langsung nampilin
     res.json({ message: 'Berita tersimpan', id: result.insertId, gambarUrl: gambar });
   });
 });
@@ -106,7 +89,7 @@ app.delete('/api/berita/:id', (req, res) => {
 });
 
 
-// C. AKADEMIK (Tidak Berubah)
+// C. AKADEMIK
 app.get('/api/akademik', (req, res) => db.query("SELECT * FROM akademik ORDER BY tanggal DESC", (err, r) => res.json(r)));
 app.post('/api/akademik', (req, res) => {
     const { title, description, date, type } = req.body;
@@ -116,26 +99,23 @@ app.post('/api/akademik', (req, res) => {
 app.delete('/api/akademik/:id', (req, res) => db.query("DELETE FROM akademik WHERE id = ?", [req.params.id], (err) => res.json({message: "Dihapus"})));
 
 
-// D. GALERI (UBAH UPLOADNYA)
+// D. GALERI (Upload Cloudinary)
 app.get('/api/galeri', (req, res) => db.query("SELECT * FROM galeri ORDER BY tanggal DESC", (err, r) => res.json(r)));
 
-// GUNAKAN 'uploadCloud.single'
 app.post('/api/galeri', uploadCloud.single('image'), (req, res) => {
     const { title, category } = req.body;
-
-    // --- PERUBAHAN PENTING DI SINI ---
     // Ambil URL langsung dari Cloudinary
     const imageUrl = req.file ? req.file.path : '';
-
+    
     const sql = "INSERT INTO galeri (deskripsi, url_gambar, kategori) VALUES (?, ?, ?)";
     db.query(sql, [title, imageUrl, category], (err, result) => res.json({ message: 'Tersimpan', id: result.insertId, imageUrl }));
 });
 app.delete('/api/galeri/:id', (req, res) => db.query("DELETE FROM galeri WHERE id = ?", [req.params.id], (err) => res.json({message: "Dihapus"})));
 
 
-// E. PROFIL SEKOLAH (Sudah versi mapping yang benar)
+// E. PROFIL SEKOLAH (Kode Asli Anda, Aman)
 app.get('/api/profil', (req, res) => {
-    db.query("SELECT * FROM profil LIMIT 1", (err, result) => {
+    db.query("SELECT * FROM profil WHERE id = 1", (err, result) => {
         if (err) return res.status(500).json(err);
         if (result.length > 0) {
             const data = result[0];
@@ -153,6 +133,7 @@ app.get('/api/profil', (req, res) => {
                 postalCode: data.kode_pos,
                 vision: data.visi,
                 mission: parsedMisi,
+                // Versi Indo
                 nama_sekolah: data.nama_sekolah,
                 status_sekolah: data.status_sekolah,
                 provinsi: data.provinsi,
@@ -184,14 +165,14 @@ app.post('/api/profil', (req, res) => {
     let misi = data.misi || data.mission || [];
     let missionString = Array.isArray(misi) ? JSON.stringify(misi) : misi;
 
-    const sql = `UPDATE profil SET
-        nama_sekolah=?, status_sekolah=?, provinsi=?, website=?,
+    const sql = `UPDATE profil SET 
+        nama_sekolah=?, status_sekolah=?, provinsi=?, website=?, 
         npsn=?, akreditasi=?, kota=?, kode_pos=?,
         visi=?, misi=?
         WHERE id=1`;
 
     db.query(sql, [
-        nama_sekolah, status_sekolah, provinsi, website,
+        nama_sekolah, status_sekolah, provinsi, website, 
         npsn, akreditasi, kota, kode_pos,
         visi, missionString
     ], (err, result) => {
@@ -200,17 +181,47 @@ app.post('/api/profil', (req, res) => {
     });
 });
 
-// (Route Dashboard statistik dihapus dulu agar kode lebih pendek, prinsipnya sama)
+// F. DASHBOARD & STATISTIK (Kode Asli Anda)
+app.get('/api/dashboard-stats', (req, res) => {
+    const queries = [
+        "SELECT COUNT(*) AS total FROM berita",
+        "SELECT COUNT(*) AS total FROM akademik",
+        "SELECT COUNT(*) AS total FROM galeri",
+        "SELECT total_views FROM pengunjung WHERE id = 1"
+    ];
+    const executeQuery = (sql) => {
+        return new Promise((resolve, reject) => {
+            db.query(sql, (err, result) => {
+                if (err) reject(err); else resolve(result[0]);
+            });
+        });
+    };
+    Promise.all(queries.map(executeQuery))
+        .then(results => {
+            res.json({
+                berita: results[0].total,
+                akademik: results[1].total,
+                galeri: results[2].total,
+                pengunjung: results[3] ? results[3].total_views : 0
+            });
+        })
+        .catch(err => res.status(500).json(err));
+});
 
+app.post('/api/visit', (req, res) => {
+    db.query("UPDATE pengunjung SET total_views = total_views + 1 WHERE id = 1", (err) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Visit recorded' });
+    });
+});
 
-// --- MODIFIKASI UNTUK VERCEL (WAJIB) ---
-// Vercel tidak suka app.listen berjalan terus menerus.
-// Kita bungkus agar hanya jalan di local development.
+// --- PENTING UNTUK VERCEL ---
+// Jangan gunakan app.listen secara langsung
 if (process.env.NODE_ENV !== 'production') {
     app.listen(port, () => {
-      console.log(`Backend Sekolah berjalan di port ${port}`);
+        console.log(`Backend Sekolah berjalan di port ${port}`);
     });
 }
 
-// PENTING: Export app agar Vercel bisa menjalankannya sebagai serverless function
+// Export app agar Vercel bisa menjalankannya
 module.exports = app;
