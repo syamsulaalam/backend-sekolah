@@ -380,10 +380,9 @@ app.post("/api/visit", (req, res) => {
   });
 });
 
-if (process.env.NODE_ENV !== "production") {
-  app.listen(port, () => {
-    console.log(`Backend Sekolah berjalan di port ${port}`);
-  });
-}
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server running on port ${port}`);
+});
+
 
 module.exports = app;
