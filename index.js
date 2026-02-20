@@ -122,6 +122,47 @@ app.post("/api/berita", (req, res) => {
   }
 });
 
+app.put("/api/berita/:id", (req, res) => {
+  try {
+    const { judul, isi, gambar } = req.body;
+    const { id } = req.params;
+
+    console.log(`📝 PUT /api/berita/${id} - Data diterima:`);
+    console.log("  judul:", judul);
+    console.log("  isi:", isi?.substring(0, 50) + "...");
+    console.log("  gambar length:", gambar?.length || 0, "chars");
+
+    if (!judul || !isi) {
+      console.warn("Judul atau isi kosong!");
+      return res.status(400).json({ message: "Judul dan isi tidak boleh kosong" });
+    }
+
+    const gambarUrl = gambar || "";
+    const sql = "UPDATE berita SET judul = ?, isi = ?, gambar = ? WHERE id = ?";
+
+    console.log("Executing SQL:", sql);
+    console.log("Parameters:", [judul, isi?.substring(0, 30) + "...", gambar?.substring(0, 30) + "...", id]);
+
+    db.query(sql, [judul, isi, gambarUrl, id], (err, result) => {
+      if (err) {
+        console.error("❌ Database Error Code:", err.code);
+        console.error("❌ Database Error Message:", err.message);
+        console.error("❌ Full Error:", err);
+        return res.status(500).json({
+          message: "Gagal update berita",
+          error: err.message,
+          code: err.code,
+        });
+      }
+      console.log("✅ Berita berhasil diupdate, ID:", id);
+      res.json({ message: "Berita berhasil diupdate", id: id });
+    });
+  } catch (error) {
+    console.error("❌ Exception di PUT /api/berita:", error);
+    res.status(500).json({ message: "Error internal server", error: error.message });
+  }
+});
+
 app.delete("/api/berita/:id", (req, res) => {
   db.query("DELETE FROM berita WHERE id = ?", [req.params.id], (err) => res.json({ message: "Berita dihapus" }));
 });
@@ -133,6 +174,20 @@ app.post("/api/akademik", (req, res) => {
   const sql = "INSERT INTO akademik (judul, deskripsi, tanggal, jenis) VALUES (?, ?, ?, ?)";
   db.query(sql, [title, description, date, type], (err, result) => res.json({ message: "Tersimpan", id: result.insertId }));
 });
+app.put("/api/akademik/:id", (req, res) => {
+  const { title, description, date, type } = req.body;
+  const { id } = req.params;
+  const sql = "UPDATE akademik SET judul = ?, deskripsi = ?, tanggal = ?, jenis = ? WHERE id = ?";
+  db.query(sql, [title, description, date, type, id], (err, result) => {
+    if (err) {
+      console.error("Error updating akademik:", err);
+      return res.status(500).json({ message: "Gagal update akademik", error: err.message });
+    }
+    console.log("✅ Akademik berhasil diupdate, ID:", id);
+    res.json({ message: "Akademik berhasil diupdate", id: id });
+  });
+});
+
 app.delete("/api/akademik/:id", (req, res) => db.query("DELETE FROM akademik WHERE id = ?", [req.params.id], (err) => res.json({ message: "Dihapus" })));
 
 // D. GALERI
@@ -380,9 +435,8 @@ app.post("/api/visit", (req, res) => {
   });
 });
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on port ${port}`);
 });
-
 
 module.exports = app;
